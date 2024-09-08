@@ -121,7 +121,12 @@ const cytoscapeOptions: CytoscapeOptions = {
 				'line-color': '#61bffc',
 				'target-arrow-color': '#61bffc',
 				'transition-property': 'background-color, line-color, target-arrow-color',
-				'transition-duration': 0.5,
+
+				// @ts-expect-error Аннотация типов в библиотеки некорректна
+				'transition-duration': '500ms',
+
+				// @ts-expect-error Аннотация типов в библиотеки некорректна
+				'transition-delay': '250ms',
 			},
 		},
 	],
@@ -147,9 +152,9 @@ const cy: Core = cytoscape(cytoscapeOptions);
 
 const selectedNodesInOrder: Set<NodeSingular> = new Set<NodeSingular>();
 
-cy.on('select', 'node', (event: EventObject) => {
-	selectedNodesInOrder.add(event.target as NodeSingular);
-});
+cy.on('select', '.highlighted', () => cy.elements().removeClass('highlighted'));
+
+cy.on('select', 'node', (event: EventObject) => selectedNodesInOrder.add(event.target as NodeSingular));
 
 cy.on('unselect', 'node', (event: EventObject) => selectedNodesInOrder.delete(event.target as NodeSingular));
 
@@ -240,8 +245,6 @@ const getPathToTarget = (
 	return path.reverse();
 };
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
 const controlFunctions = {
 	addNode: () => {
 		const id = `n${cy.nodes().length + 1}`;
@@ -312,8 +315,6 @@ const controlFunctions = {
 
 		cy.elements().removeClass('highlighted');
 
-		await sleep(2000);
-
 		const selectedNodes: SetIterator<NodeSingular> = selectedNodesInOrder.values();
 
 		const sourceNode: NodeSingular = selectedNodes.next().value as NodeSingular;
@@ -332,17 +333,16 @@ const controlFunctions = {
 
 		const pathToTarget: NodeSingular[] = getPathToTarget(sourceNode, targetNode, previous);
 
-		console.log(
-			`Path from ${sourceNode.id()} to ${targetNode.id()}: `,
-			pathToTarget.map((node) => node.id()),
-		);
+		console.log(`Path from ${sourceNode.id()} to ${targetNode.id()}: ${pathToTarget.map((node) => node.id())}`);
 
 		const pathToTargetIterator: ArrayIterator<NodeSingular> = pathToTarget.values();
 
 		const highlightPath = (previousNode: NodeSingular | undefined = undefined) => {
 			const currentNode: NodeSingular = pathToTargetIterator.next().value;
 
-			if (currentNode === undefined) return;
+			if (currentNode === undefined) {
+				return;
+			}
 
 			if (previousNode !== undefined) {
 				console.log(`Highlighting edge`);
@@ -356,6 +356,8 @@ const controlFunctions = {
 
 			setTimeout(highlightPath, 1000, currentNode);
 		};
+
+		cy.elements().unselect();
 
 		highlightPath();
 	},
