@@ -1,18 +1,13 @@
 {
-    "compilerOptions": {
-        "module": "ESNext",
-        "moduleResolution": "Bundler",
-        "target": "ES2023",
-        "jsx": "react",
-        "strictNullChecks": true,
-        "strictFunctionTypes": true,
-        "sourceMap": true,
-        "strict": true,
-        "noUncheckedIndexedAccess": true,
-        "noImplicitOverride": true,
-    },
-    "exclude": [
-        "node_modules",
-        "**/node_modules/*"
-    ]
+	"compilerOptions": {
+		"baseUrl": ".",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"noImplicitOverride": true,
+		"noUncheckedIndexedAccess": true,
+		"sourceMap": true,
+		"strictFunctionTypes": true,
+		"target": "ES2023"
+	},
+	"exclude": ["node_modules", "**/node_modules/*"]
 }
