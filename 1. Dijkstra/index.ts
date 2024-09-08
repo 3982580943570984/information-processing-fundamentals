@@ -10,6 +10,9 @@ import cytoscape, {
 	NodeSingular,
 } from 'cytoscape';
 import * as dat from 'dat.gui';
+import edgehandles, { EdgeHandlesInstance } from 'cytoscape-edgehandles';
+
+cytoscape.use(edgehandles);
 
 const adjacencyMatrixInput = document.getElementById('adjacencyMatrix') as HTMLTextAreaElement;
 const generateGraphButton = document.getElementById('generateGraph') as HTMLButtonElement;
@@ -149,6 +152,26 @@ const cytoscapeOptions: CytoscapeOptions = {
 };
 
 const cy: Core = cytoscape(cytoscapeOptions);
+
+const eh: EdgeHandlesInstance = cy.edgehandles({
+	edgeParams: (source: NodeSingular, target: NodeSingular) => {
+		// const weight = prompt('Enter weight for the edge:', '1');
+		const weight = controlValues.edgeWeight;
+		return {
+			data: {
+				source: source.id(),
+				target: target.id(),
+				// weight: weight ? parseInt(weight) : 1,
+				weight: weight,
+			},
+		};
+	},
+	canConnect: (source: NodeSingular, target: NodeSingular) =>
+		// TODO: prevent more than one edge between source and node
+		// Prevent self-loops
+		source.id() !== target.id(),
+	snap: false,
+});
 
 const selectedNodesInOrder: Set<NodeSingular> = new Set<NodeSingular>();
 
@@ -308,6 +331,18 @@ const controlFunctions = {
 
 		cy.remove(selectedEdges);
 	},
+	toggleDrawMode: () => {
+		controlValues.drawMode = !controlValues.drawMode;
+
+		if (controlValues.drawMode) {
+			eh.enableDrawMode();
+		} else {
+			eh.disableDrawMode();
+		}
+
+		const buttonElement = edgesFolder.__controllers.at(1);
+		buttonElement.name(controlValues.drawMode ? 'Draw mode ON' : 'Draw mode OFF');
+	},
 	singleSourceShortestPath: async () => {
 		if (selectedNodesInOrder.size !== 2) {
 			return alert('Please select exactly two nodes to compute shortest path.');
@@ -328,7 +363,7 @@ const controlFunctions = {
 		console.log(`Distance from ${sourceNode.id()} to ${targetNode.id()}: ${distanceFromSourceToTarget}`);
 
 		if (distanceFromSourceToTarget === Infinity) {
-			return;
+			return alert(`There is no path from ${sourceNode.id()} to ${targetNode.id()}.`);
 		}
 
 		const pathToTarget: NodeSingular[] = getPathToTarget(sourceNode, targetNode, previous);
@@ -364,10 +399,9 @@ const controlFunctions = {
 };
 
 const controlValues = {
+	drawMode: false,
 	edgeWeight: 1,
 };
-
-// TODO: fix graph highlighting
 
 const gui: dat.GUI = new dat.GUI();
 
@@ -385,6 +419,7 @@ addEdgeFolder.add(controlValues, 'edgeWeight', 1, 100, 1).name('Weight');
 addEdgeFolder.add(controlFunctions, 'addEdge').name('Add Edge');
 
 edgesFolder.add(controlFunctions, 'removeEdge').name('Remove Edge');
+edgesFolder.add(controlFunctions, 'toggleDrawMode').name('Draw mode OFF');
 
 const algorithmsFolder: dat.GUI = gui.addFolder('Algorithms');
 algorithmsFolder.closed = false;
