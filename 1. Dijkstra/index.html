@@ -2,24 +2,39 @@
 
 <head>
     <style>
-        #cy {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-
+        body {
+            font-family: Arial, sans-serif;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
             align-items: center;
+            gap: 20px;
+            margin: 20px;
+        }
+
+        #matrix-input {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #cy {
+            width: 1280px;
+            height: 720px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
         }
     </style>
     <script src="index.ts" type="module"></script>
 </head>
 
 <body>
+    <div id="matrix-input">
+        <textarea id="adjacencyMatrix" rows="10" cols="30" placeholder="Enter adjacency matrix..."></textarea>
+        <br>
+        <button id="generateGraph">Generate Graph</button>
+    </div>
+
     <div id="cy"></div>
 </body>
 
