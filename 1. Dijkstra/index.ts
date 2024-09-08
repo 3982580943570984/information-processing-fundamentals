@@ -403,6 +403,8 @@ const controlValues = {
 	edgeWeight: 1,
 };
 
+// TODO: fix edge highlight
+
 const gui: dat.GUI = new dat.GUI();
 
 const nodesFolder: dat.GUI = gui.addFolder('Nodes');
