@@ -1,0 +1,22 @@
+body {
+	align-items: start;
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+}
+
+#matrix-input {
+	align-items: center;
+	display: flex;
+	flex-direction: column;
+	z-index: 1;
+	gap: 10px;
+}
+
+#cy {
+	height: 100%;
+	left: 0;
+	position: absolute;
+	top: 0;
+	width: 100%;
+}
