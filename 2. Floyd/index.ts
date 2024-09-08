@@ -2,7 +2,6 @@ import cytoscape, { Core, CytoscapeOptions, EdgeCollection, EdgeDataDefinition, 
 import * as dat from 'dat.gui'
 
 let nodeIdCounter = 0;
-
 let edgeIdCounter = 0;
 
 const container: HTMLDivElement = document.getElementById('cy') as HTMLDivElement
@@ -20,17 +19,18 @@ const cytoscapeOptions: CytoscapeOptions = {
         {
             selector: 'node',
             style: {
-                'label': 'data(id)',  
-                'text-valign': 'center',  
-                'text-halign': 'center', 
-                'background-color': '#ffc0cb',  
-                'color': '#000',  
-                'font-size': '10px',  
+                'label': 'data(id)',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'background-color': '#ffc0cb',
+                'color': '#000',
+                'font-size': '10px',
             }
         },
         {
             selector: 'edge',
             style: {
+                'label': 'data(weight)',  // Отображение веса на ребре
                 'width': 2,
                 'line-color': '#ccc',
                 'target-arrow-color': '#ccc',
@@ -40,13 +40,13 @@ const cytoscapeOptions: CytoscapeOptions = {
         {
             selector: 'node:selected',
             style: {
-                'background-color': '#b3dcfd' 
+                'background-color': '#b3dcfd'
             }
         },
         {
             selector: 'edge:selected',
             style: {
-                'background-color': '#b3dcfd' 
+                'background-color': '#b3dcfd'
             }
         }
     ]
@@ -67,7 +67,6 @@ const controls = {
         }
 
         cy.add(elementDefinition);
-
         cy.layout({ name: 'grid' }).run();
     },
     removeNode: () => {
@@ -87,16 +86,22 @@ const controls = {
         const sourceNode = selectedNodes.first() as NodeSingular;
         const targetNode = selectedNodes.last() as NodeSingular;
 
-        const edgeAlreadyExists = sourceNode.edgesWith(targetNode).nonempty()
+        const edgeAlreadyExists = sourceNode.edgesWith(targetNode).nonempty();
         if (edgeAlreadyExists) {
-            return alert('An edge already exists between these nodes.')
+            return alert('An edge already exists between these nodes.');
+        }
+
+        const weight = parseFloat(prompt('Enter weight for this edge:', '1') as string);
+        if (isNaN(weight) || weight <= 0) {
+            return alert('Invalid weight. Please enter a positive number.');
         }
 
         const id = `e${edgeIdCounter++}`;
         const edgeDataDefinition: EdgeDataDefinition = {
             id: id,
             source: sourceNode.id(),
-            target: targetNode.id()
+            target: targetNode.id(),
+            weight: weight  // Добавляем вес ребра
         };
 
         const elementDataDefinition: ElementDefinition = {
@@ -119,13 +124,12 @@ const controls = {
 const floyd = () => {
     const nodes = cy.nodes();
     const edges = cy.edges();
-    const nodeIds: string[] = nodes.map((node) => node.id()); // Извлекаем идентификаторы узлов
+    const nodeIds: string[] = nodes.map((node) => node.id());
     const n = nodeIds.length;
 
     // Инициализация матрицы расстояний и матрицы следующего узла
     const dist: number[][] = Array.from({ length: n }, () => Array(n).fill(Infinity));
     const next: (number | null)[][] = Array.from({ length: n }, () => Array(n).fill(null));
-
     // Инициализация начальных значений: расстояние от узла до самого себя = 0
     for (let i = 0; i < n; i++) {
         dist[i][i] = 0;
@@ -135,15 +139,15 @@ const floyd = () => {
     edges.forEach(edge => {
         const sourceIndex = nodeIds.indexOf(edge.source().id());
         const targetIndex = nodeIds.indexOf(edge.target().id());
-        const weight = 1; // Вес рёбер 
+        const weight = edge.data('weight');  // Используем указанный вес ребра
 
         dist[sourceIndex][targetIndex] = weight;
-        dist[targetIndex][sourceIndex] = weight; // Если граф неориентированный
+        dist[targetIndex][sourceIndex] = weight;  // Если граф неориентированный
         next[sourceIndex][targetIndex] = targetIndex;
-        next[targetIndex][sourceIndex] = sourceIndex; // Если граф неориентированный
+        next[targetIndex][sourceIndex] = sourceIndex;  // Если граф неориентированный
     });
 
-    // Алгоритм Флойда для нахождения кратчайших путей
+    // Алгоритм Флойда-Уоршелла для нахождения кратчайших путей
     for (let k = 0; k < n; k++) {
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
@@ -170,10 +174,7 @@ const floyd = () => {
         return path;
     };
 
-    // Массив для хранения результатов
     const results: { from: string, to: string, path: string[], length: number }[] = [];
-
-    // Проходим по всем парам узлов, исключая одинаковые узлы (i !== j)
     for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
             if (i !== j && dist[i][j] !== Infinity) {
@@ -238,17 +239,17 @@ const display = (results: { from: string, to: string, path: string[], length: nu
 const findPaths = {
     floyd: () => {
         let results = floyd();
-        display(results); 
+        display(results);
     }
 }
 
 const gui: dat.GUI = new dat.GUI();
 
-const nodesFolder: dat.GUI = gui.addFolder('Nodes')
+const nodesFolder: dat.GUI = gui.addFolder('Nodes');
 nodesFolder.add(controls, 'addNode').name('Add Node');
 nodesFolder.add(controls, 'removeNode').name('Remove Node');
 
-const edgesFolder: dat.GUI = gui.addFolder('Edges')
+const edgesFolder: dat.GUI = gui.addFolder('Edges');
 edgesFolder.add(controls, 'addEdge').name('Add Edge');
 edgesFolder.add(controls, 'removeEdge').name('Remove Edge');
 
