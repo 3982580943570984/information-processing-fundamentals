@@ -382,7 +382,30 @@ const controlFunctions = {
 			if (previousNode !== undefined) {
 				console.log(`Highlighting edge`);
 
-				previousNode.edgesTo(currentNode).addClass('highlighted');
+				const edgesFromPreviousToCurrent = previousNode.edgesTo(currentNode);
+
+				let minWeightForEdgesFromPreviousToCurrent = Infinity;
+				edgesFromPreviousToCurrent.edges().forEach(edge => {
+					const edgeWeight = edge.data('weight');
+					
+					if (!(edgeWeight < minWeightForEdgesFromPreviousToCurrent)) {
+						return;
+					}
+
+					minWeightForEdgesFromPreviousToCurrent = edgeWeight;
+				});
+
+				console.log(`Min weight: ${minWeightForEdgesFromPreviousToCurrent}`)
+
+				edgesFromPreviousToCurrent.forEach(edge => {
+					if (edge.data('weight') !== minWeightForEdgesFromPreviousToCurrent) {
+						return;
+					}
+
+					edge.addClass('highlighted');
+				})
+
+				// edgesFromPreviousToCurrent.edges(`[weight = '${minWeightForEdgesFromPreviousToCurrent}']`).addClass('highlighted');
 			}
 
 			console.log(`Highlighting node with id: ${currentNode.id()}`);
