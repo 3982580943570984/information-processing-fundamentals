@@ -1,8 +1,20 @@
 import cytoscape, { Core, CytoscapeOptions, EdgeCollection, EdgeDataDefinition, ElementDefinition, NodeCollection, NodeDataDefinition, NodeSingular } from 'cytoscape';
 import * as dat from 'dat.gui'
 
-let nodeIdCounter = 0;
-let edgeIdCounter = 0;
+interface PathfindingResults {
+    from: string;
+    to: string;
+    path: string[];
+    length: number;
+}
+
+interface AlgorithmResults {
+    paths: PathfindingResults[];
+    executionTime: number; 
+}
+
+let nodeIdCounter = 3;
+let edgeIdCounter = 2;
 
 const container: HTMLDivElement = document.getElementById('cy') as HTMLDivElement
 
@@ -30,7 +42,7 @@ const cytoscapeOptions: CytoscapeOptions = {
         {
             selector: 'edge',
             style: {
-                'label': 'data(weight)',  // Отображение веса на ребре
+                'label': 'data(weight)',  
                 'width': 2,
                 'line-color': '#ccc',
                 'target-arrow-color': '#ccc',
@@ -49,7 +61,15 @@ const cytoscapeOptions: CytoscapeOptions = {
                 'background-color': '#b3dcfd'
             }
         }
-    ]
+    ],
+	elements: [
+		// Nodes
+		{ data: { id: 'n1' } },
+		{ data: { id: 'n2' } },
+
+		// Edges
+		{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
+	],
 };
 
 const cy: Core = cytoscape(cytoscapeOptions);
@@ -91,10 +111,7 @@ const controls = {
             return alert('An edge already exists between these nodes.');
         }
 
-        const weight = parseFloat(prompt('Enter weight for this edge:', '1') as string);
-        if (isNaN(weight) || weight <= 0) {
-            return alert('Invalid weight. Please enter a positive number.');
-        }
+        const weight = Math.trunc(controlValues.edgeWeight) as number;
 
         const id = `e${edgeIdCounter++}`;
         const edgeDataDefinition: EdgeDataDefinition = {
@@ -121,33 +138,32 @@ const controls = {
     }
 }
 
-const floyd = () => {
+const floyd = (): AlgorithmResults => {
     const nodes = cy.nodes();
     const edges = cy.edges();
     const nodeIds: string[] = nodes.map((node) => node.id());
     const n = nodeIds.length;
 
-    // Инициализация матрицы расстояний и матрицы следующего узла
     const dist: number[][] = Array.from({ length: n }, () => Array(n).fill(Infinity));
     const next: (number | null)[][] = Array.from({ length: n }, () => Array(n).fill(null));
-    // Инициализация начальных значений: расстояние от узла до самого себя = 0
+
     for (let i = 0; i < n; i++) {
         dist[i][i] = 0;
     }
 
-    // Заполняем начальные значения расстояний для существующих рёбер
     edges.forEach(edge => {
         const sourceIndex = nodeIds.indexOf(edge.source().id());
         const targetIndex = nodeIds.indexOf(edge.target().id());
-        const weight = edge.data('weight');  // Используем указанный вес ребра
+        const weight = edge.data('weight') || 1;
 
         dist[sourceIndex][targetIndex] = weight;
-        dist[targetIndex][sourceIndex] = weight;  // Если граф неориентированный
+        dist[targetIndex][sourceIndex] = weight;
         next[sourceIndex][targetIndex] = targetIndex;
-        next[targetIndex][sourceIndex] = sourceIndex;  // Если граф неориентированный
+        next[targetIndex][sourceIndex] = sourceIndex;
     });
 
-    // Алгоритм Флойда-Уоршелла для нахождения кратчайших путей
+    const startTime = performance.now();  // Начало замера времени
+
     for (let k = 0; k < n; k++) {
         for (let i = 0; i < n; i++) {
             for (let j = 0; j < n; j++) {
@@ -159,7 +175,11 @@ const floyd = () => {
         }
     }
 
-    // Функция для восстановления пути из матрицы next
+    const endTime = performance.now();  // Окончание замера времени
+    const executionTime = endTime - startTime;  // Время выполнения
+
+    const results: PathfindingResults[] = [];
+
     const getPath = (startIndex: number, endIndex: number): number[] => {
         const path = [];
         if (next[startIndex][endIndex] === null) {
@@ -174,7 +194,6 @@ const floyd = () => {
         return path;
     };
 
-    const results: { from: string, to: string, path: string[], length: number }[] = [];
     for (let i = 0; i < n; i++) {
         for (let j = 0; j < n; j++) {
             if (i !== j && dist[i][j] !== Infinity) {
@@ -188,15 +207,113 @@ const floyd = () => {
             }
         }
     }
-    return results;
+
+    return { paths: results, executionTime };  
 };
 
-const display = (results: { from: string, to: string, path: string[], length: number }[]) => {
+const dijkstra = (): AlgorithmResults => {
+    const nodes = cy.nodes();
+    const results: PathfindingResults[] = [];
+    let totalExecutionTime = 0;  // Для накопления времени выполнения
+
+    nodes.forEach((sourceNode: NodeSingular) => {
+        const distance: Map<NodeSingular, number> = new Map<NodeSingular, number>();
+        const previous: Map<NodeSingular, NodeSingular | undefined> = new Map<NodeSingular, NodeSingular | undefined>();
+        const queue: Set<NodeSingular> = new Set<NodeSingular>();
+
+        nodes.forEach((node: NodeSingular) => {
+            distance.set(node, Infinity);
+            previous.set(node, undefined);
+            queue.add(node);
+        });
+
+        distance.set(sourceNode, 0);
+
+        const startTime = performance.now();  // Начало замера времени
+
+        while (queue.size !== 0) {
+            let nodeWithMinDistance: NodeSingular | undefined = undefined;
+            let minDistance = Infinity;
+
+            queue.forEach((node: NodeSingular) => {
+                const distToNode = distance.get(node)!;
+                if (distToNode < minDistance) {
+                    minDistance = distToNode;
+                    nodeWithMinDistance = node;
+                }
+            });
+
+            if (!nodeWithMinDistance) {
+                break;
+            }
+
+            queue.delete(nodeWithMinDistance);
+
+            nodeWithMinDistance.neighborhood('edge').forEach((edge) => {
+                const neighbor = edge.connectedNodes().filter(node => node.id() !== nodeWithMinDistance.id()).first();
+
+                if (!queue.has(neighbor)) {
+                    return;
+                }
+
+                const alt = distance.get(nodeWithMinDistance)! + (edge.data('weight') || 1);
+
+                if (alt < distance.get(neighbor)!) {
+                    distance.set(neighbor, alt);
+                    previous.set(neighbor, nodeWithMinDistance);
+                }
+            });
+        }
+
+        const endTime = performance.now();  // Окончание замера времени
+        totalExecutionTime += endTime - startTime;  // Накопление времени выполнения
+
+        // Формирование результатов для всех узлов, кроме самого себя
+        nodes.forEach((targetNode: NodeSingular) => {
+            if (sourceNode === targetNode) {
+                return;
+            }
+
+            const path = [];
+            let currentNode: NodeSingular | undefined = targetNode;
+
+            while (currentNode && previous.get(currentNode)) {
+                path.unshift(currentNode.id());
+                currentNode = previous.get(currentNode);
+            }
+
+            if (path.length > 0) {
+                path.unshift(sourceNode.id());
+
+                results.push({
+                    from: sourceNode.id(),
+                    to: targetNode.id(),
+                    path: path,
+                    length: distance.get(targetNode)!
+                });
+            }
+        });
+    });
+
+    return { paths: results, executionTime: totalExecutionTime };  
+};
+
+const display = (results: AlgorithmResults) => {
     const resultContainer = document.getElementById('result');
+
+    // Проверка наличия контейнера для результатов
+    if (!resultContainer) {
+        console.error('Контейнер для результатов не найден.');
+        return;
+    }
+
+    // Очищаем содержимое контейнера
     resultContainer.innerHTML = ''; 
 
+    // Создаем таблицу
     const table = document.createElement('table');
 
+    // Создаем заголовок таблицы
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
 
@@ -209,8 +326,11 @@ const display = (results: { from: string, to: string, path: string[], length: nu
     thead.appendChild(headerRow);
     table.appendChild(thead);
 
+    // Создаем тело таблицы
     const tbody = document.createElement('tbody');
-    results.forEach(result => {
+
+    // Добавляем результаты алгоритма
+    results.paths.forEach(result => {
         const row = document.createElement('tr');
 
         const fromCell = document.createElement('td');
@@ -232,13 +352,30 @@ const display = (results: { from: string, to: string, path: string[], length: nu
         tbody.appendChild(row);
     });
 
+    // Добавляем строку с временем выполнения алгоритма
+    const timeRow = document.createElement('tr');
+    timeRow.innerHTML = `<td colspan="4">Время выполнения: ${results.executionTime.toFixed(2)} мс</td>`;
+    tbody.appendChild(timeRow);
+
+    // Добавляем tbody в таблицу
     table.appendChild(tbody);
+
+    // Добавляем таблицу в контейнер результатов
     resultContainer.appendChild(table);
+};
+
+const controlValues = {
+	edgeWeight: 1,
 };
 
 const findPaths = {
     floyd: () => {
         let results = floyd();
+        console.log(results);
+        display(results);
+    },
+    dijkstra: () =>{
+        let results = dijkstra();
         display(results);
     }
 }
@@ -252,6 +389,8 @@ nodesFolder.add(controls, 'removeNode').name('Remove Node');
 const edgesFolder: dat.GUI = gui.addFolder('Edges');
 edgesFolder.add(controls, 'addEdge').name('Add Edge');
 edgesFolder.add(controls, 'removeEdge').name('Remove Edge');
+edgesFolder.add(controlValues, 'edgeWeight', 1, 100, 1).name('Weight');
 
 const shortestPathFolder: dat.GUI = gui.addFolder('Find Paths');
 shortestPathFolder.add(findPaths, 'floyd').name('Floyd');
+shortestPathFolder.add(findPaths, 'dijkstra').name('Dijkstra');
