@@ -1,16 +1,18 @@
 'use client';
 
-import cytoscape from 'cytoscape';
-import edgehandles from 'cytoscape-edgehandles';
-import { useEffect, useRef } from 'react';
+import cytoscape, { Core, CytoscapeOptions, NodeSingular } from 'cytoscape';
+import edgehandles, { EdgeHandlesInstance, EdgeHandlesOptions } from 'cytoscape-edgehandles';
+import { useEffect, useRef, useState } from 'react';
 
 const Graph: React.FC = () => {
 	const cyRef = useRef<HTMLDivElement>(null);
+	const cyInstanceRef = useRef<Core | null>(null);
+	const ehInstanceRef = useRef<EdgeHandlesInstance | null>(null);
 
 	useEffect(() => {
 		cytoscape.use(edgehandles);
 
-		cytoscape({
+		const cyOptions: CytoscapeOptions = {
 			container: cyRef.current,
 			style: [
 				{
@@ -66,7 +68,33 @@ const Graph: React.FC = () => {
 			panningEnabled: false,
 			zoomingEnabled: false,
 			selectionType: 'single',
-		});
+		};
+
+		// Инициализируем `cytoscape`
+		cyInstanceRef.current = cytoscape(cyOptions);
+
+		const ehOptions: EdgeHandlesOptions = {
+			edgeParams: (source: NodeSingular, target: NodeSingular) => ({
+				data: {
+					source: source.id(),
+					target: target.id(),
+					weight: 123,
+				},
+			}),
+
+			// TODO: prevent more than one edge between source and node
+			canConnect: (source: NodeSingular, target: NodeSingular) => source.id() !== target.id(),
+
+			snap: false,
+		};
+
+		// Инициализируем `edgehandles`
+		ehInstanceRef.current = cyInstanceRef.current.edgehandles(ehOptions);
+
+		return () => {
+			cyInstanceRef.current?.destroy();
+			ehInstanceRef.current?.destroy();
+		};
 	});
 
 	return (
