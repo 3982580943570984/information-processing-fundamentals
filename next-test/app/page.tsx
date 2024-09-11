@@ -1,3 +1,4 @@
+import MatrixTable from './components/adjacency_matrix';
 import ControlPanel from './components/control_panel';
 import Graph from './components/graph';
 
@@ -6,10 +7,11 @@ export const metadata = {
 };
 
 const Root: React.FC = () => (
-	<div>
-		<Graph />
-		<ControlPanel />
-	</div>
+	<>
+		{/* <Graph />
+		<ControlPanel /> */}
+		<MatrixTable />
+	</>
 );
 
 export default Root;

@@ -2,7 +2,7 @@
 
 import cytoscape, { Core, CytoscapeOptions, NodeSingular } from 'cytoscape';
 import edgehandles, { EdgeHandlesInstance, EdgeHandlesOptions } from 'cytoscape-edgehandles';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 const Graph: React.FC = () => {
 	const cyRef = useRef<HTMLDivElement>(null);

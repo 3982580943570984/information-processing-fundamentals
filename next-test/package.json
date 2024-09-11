@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.20.5",
     "cytoscape": "^3.30.2",
     "cytoscape-edgehandles": "^4.0.1",
     "leva": "^0.9.35",
