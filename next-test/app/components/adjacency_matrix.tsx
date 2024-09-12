@@ -1,14 +1,36 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useContext, useEffect } from 'react';
 import { useReactTable, getCoreRowModel, ColumnDef, flexRender } from '@tanstack/react-table';
+import { GraphElementsContext } from './graph';
 
 type MatrixCell = number;
 type MatrixRow = MatrixCell[];
 
-const MatrixTable: React.FC = () => {
-	const [size, setSize] = useState(3); // Default size of 3x3
+const AdjacencyMatrix: React.FC = () => {
+	const { graphElements } = useContext(GraphElementsContext);
+
+	const [size, setSize] = useState(graphElements.nodes.length);
 	const [matrix, setMatrix] = useState<MatrixRow[]>(Array.from({ length: size }, () => Array(size).fill(0)));
+
+	useEffect(() => {
+		const newSize = graphElements.nodes.length;
+
+		if (newSize !== size) {
+			handleResize(newSize);
+		}
+
+		// Recompute the matrix based on edges
+		const newMatrix = Array.from({ length: newSize }, () => Array(newSize).fill(0));
+		graphElements.edges.forEach((edge) => {
+			const sourceIndex = graphElements.nodes.findIndex((node) => node.data.id === edge.data.source);
+			const targetIndex = graphElements.nodes.findIndex((node) => node.data.id === edge.data.target);
+			if (sourceIndex !== -1 && targetIndex !== -1) {
+				newMatrix[sourceIndex][targetIndex] = edge.data.weight;
+			}
+		});
+		setMatrix(newMatrix);
+	}, [graphElements, size]);
 
 	// Update matrix size
 	const handleResize = (newSize: number) => {
@@ -110,4 +132,4 @@ const MatrixTable: React.FC = () => {
 	);
 };
 
-export default MatrixTable;
+export default AdjacencyMatrix;

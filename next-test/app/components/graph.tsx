@@ -1,10 +1,38 @@
 'use client';
 
-import cytoscape, { Core, CytoscapeOptions, NodeSingular } from 'cytoscape';
+import cytoscape, { Core, CytoscapeOptions, ElementDefinition, NodeSingular } from 'cytoscape';
 import edgehandles, { EdgeHandlesInstance, EdgeHandlesOptions } from 'cytoscape-edgehandles';
-import { useEffect, useRef } from 'react';
+import { createContext, MutableRefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import ControlPanel from './control_panel';
+import AdjacencyMatrix from './adjacency_matrix';
 
-const Graph: React.FC = () => {
+type GraphElements = {
+	nodes: ElementDefinition[];
+	edges: ElementDefinition[];
+};
+
+type GraphElementsState = {
+	graphElements: GraphElements;
+	setGraphElements: React.Dispatch<React.SetStateAction<GraphElements>>;
+};
+
+// TODO: move contexts to separate folder
+
+const GraphElementsContext = createContext<GraphElementsState>({
+	graphElements: { nodes: [], edges: [] },
+	setGraphElements: () => {},
+});
+
+const CyInstanceRefContext = createContext<MutableRefObject<Core | null>>({ current: null });
+
+const EhInstanceRefContext = createContext<MutableRefObject<EdgeHandlesInstance | null>>({ current: null });
+
+const CytoscapeGraph: React.FC = () => {
+	const [graphElements, setGraphElements] = useState<GraphElements>({
+		nodes: [{ data: { id: 'n1' } }, { data: { id: 'n2' } }],
+		edges: [{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } }],
+	});
+
 	const cyRef = useRef<HTMLDivElement>(null);
 	const cyInstanceRef = useRef<Core | null>(null);
 	const ehInstanceRef = useRef<EdgeHandlesInstance | null>(null);
@@ -12,6 +40,7 @@ const Graph: React.FC = () => {
 	useEffect(() => {
 		cytoscape.use(edgehandles);
 
+		// Определяем опции для `cytoscape`
 		const cyOptions: CytoscapeOptions = {
 			container: cyRef.current,
 			style: [
@@ -52,14 +81,7 @@ const Graph: React.FC = () => {
 					},
 				},
 			],
-			elements: [
-				// Nodes
-				{ data: { id: 'n1' } },
-				{ data: { id: 'n2' } },
-
-				// Edges
-				{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
-			],
+			elements: [...graphElements.nodes, ...graphElements.edges],
 			layout: {
 				name: 'grid',
 				rows: 1,
@@ -73,6 +95,7 @@ const Graph: React.FC = () => {
 		// Инициализируем `cytoscape`
 		cyInstanceRef.current = cytoscape(cyOptions);
 
+		// Определяем опции для `edgehandles`
 		const ehOptions: EdgeHandlesOptions = {
 			edgeParams: (source: NodeSingular, target: NodeSingular) => ({
 				data: {
@@ -95,17 +118,46 @@ const Graph: React.FC = () => {
 			cyInstanceRef.current?.destroy();
 			ehInstanceRef.current?.destroy();
 		};
-	});
+	}, []);
+
+	useEffect(() => {
+		const cyInstance = cyInstanceRef.current;
+
+		if (cyInstance == null) {
+			return console.warn('cyInstanceRef.current is null');
+		}
+
+		// Удалаяем все элементы текущего графа
+		cyInstance.elements().remove();
+
+		// Добавляем новые элементы
+		cyInstance.add([...graphElements.nodes, ...graphElements.edges]);
+
+		// Позиционируем элементы графа
+		cyInstance.layout({ name: 'circle' }).run();
+	}, [graphElements]);
 
 	return (
-		<div
-			ref={cyRef}
-			style={{
-				height: '100vh',
-				width: '100wh',
-			}}
-		/>
+		<>
+			<div
+				ref={cyRef}
+				style={{
+					height: '100vh',
+					width: '100wh',
+				}}
+			/>
+			<GraphElementsContext.Provider value={{ graphElements, setGraphElements }}>
+				<CyInstanceRefContext.Provider value={cyInstanceRef}>
+					<EhInstanceRefContext.Provider value={ehInstanceRef}>
+						<ControlPanel />
+						<AdjacencyMatrix />
+					</EhInstanceRefContext.Provider>
+				</CyInstanceRefContext.Provider>
+			</GraphElementsContext.Provider>
+		</>
 	);
 };
 
-export default Graph;
+export { GraphElementsContext, CyInstanceRefContext, EhInstanceRefContext };
+
+export default CytoscapeGraph;
