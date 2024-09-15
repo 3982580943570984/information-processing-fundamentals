@@ -138,6 +138,20 @@ const ControlPanel: React.FC = () => {
 					return previousSelectedGraphElements;
 				});
 			}),
+			'Переключить режим рисования': button(() => {
+				const ehInstance = ehInstanceRef?.current;
+				if (ehInstance === null) {
+					return console.warn('ehInstance is null');
+				}
+
+				setDrawMode((prevDrawMode) => {
+					const newDrawMode = !prevDrawMode;
+
+					newDrawMode === true ? ehInstance.enableDrawMode() : ehInstance.disableDrawMode();
+
+					return newDrawMode;
+				});
+			}),
 		},
 		[edgeWeight],
 	);
@@ -417,23 +431,6 @@ const ControlPanel: React.FC = () => {
 			});
 
 			setFloydWarshallTextAreaValue(floydWarshallText); // Обновляем только текстовое поле
-		}),
-	});
-
-	useControls({
-		'Переключить режим рисования': button(() => {
-			const ehInstance = ehInstanceRef?.current;
-			if (ehInstance === null) {
-				return console.warn('ehInstance is null');
-			}
-
-			setDrawMode((prevDrawMode) => {
-				const newDrawMode = !prevDrawMode;
-
-				newDrawMode === true ? ehInstance.enableDrawMode() : ehInstance.disableDrawMode();
-
-				return newDrawMode;
-			});
 		}),
 	});
 
