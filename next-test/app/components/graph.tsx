@@ -1,26 +1,41 @@
 'use client';
 
-import cytoscape, { Core, CytoscapeOptions, ElementDefinition, NodeSingular } from 'cytoscape';
+import cytoscape, {
+	Core,
+	CytoscapeOptions,
+	EdgeDefinition,
+	EdgeSingular,
+	EventObject,
+	NodeDefinition,
+	NodeSingular,
+} from 'cytoscape';
 import edgehandles, { EdgeHandlesInstance, EdgeHandlesOptions } from 'cytoscape-edgehandles';
-import { createContext, MutableRefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, MutableRefObject, useEffect, useRef, useState } from 'react';
 import ControlPanel from './control_panel';
 import AdjacencyMatrix from './adjacency_matrix';
 
 type GraphElements = {
-	nodes: ElementDefinition[];
-	edges: ElementDefinition[];
+	nodes: NodeDefinition[];
+	edges: EdgeDefinition[];
+};
+
+type SelectedGraphElements = {
+	nodes: NodeSingular[];
+	edges: EdgeSingular[];
 };
 
 type GraphElementsState = {
 	graphElements: GraphElements;
 	setGraphElements: React.Dispatch<React.SetStateAction<GraphElements>>;
+	selectedGraphElements: SelectedGraphElements;
+	setSelectedGraphElements: React.Dispatch<React.SetStateAction<SelectedGraphElements>>;
 };
-
-// TODO: move contexts to separate folder
 
 const GraphElementsContext = createContext<GraphElementsState>({
 	graphElements: { nodes: [], edges: [] },
 	setGraphElements: () => {},
+	selectedGraphElements: { nodes: [], edges: [] },
+	setSelectedGraphElements: () => {},
 });
 
 const CyInstanceRefContext = createContext<MutableRefObject<Core | null>>({ current: null });
@@ -29,14 +44,19 @@ const EhInstanceRefContext = createContext<MutableRefObject<EdgeHandlesInstance 
 
 const CytoscapeGraph: React.FC = () => {
 	const [graphElements, setGraphElements] = useState<GraphElements>({
-		nodes: [{ data: { id: 'n1' } }, { data: { id: 'n2' } }],
+		nodes: [{ data: { id: 'n1', label: 'n1' } }, { data: { id: 'n2', label: 'n2' } }],
 		edges: [{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } }],
+	});
+	const [selectedGraphElements, setSelectedGraphElements] = useState<SelectedGraphElements>({
+		nodes: [],
+		edges: [],
 	});
 
 	const cyRef = useRef<HTMLDivElement>(null);
 	const cyInstanceRef = useRef<Core | null>(null);
 	const ehInstanceRef = useRef<EdgeHandlesInstance | null>(null);
 
+	// Эффект при первом рендере для инициализации библиотеки
 	useEffect(() => {
 		cytoscape.use(edgehandles);
 
@@ -48,7 +68,7 @@ const CytoscapeGraph: React.FC = () => {
 					selector: 'node',
 					style: {
 						'text-valign': 'center',
-						content: 'data(id)',
+						content: 'data(label)',
 						width: 40,
 						height: 40,
 					},
@@ -87,8 +107,11 @@ const CytoscapeGraph: React.FC = () => {
 				rows: 1,
 				padding: 10,
 			},
-			panningEnabled: false,
-			zoomingEnabled: false,
+			panningEnabled: true,
+			zoomingEnabled: true,
+			minZoom: 0.05,
+			zoom: 1,
+			maxZoom: 2,
 			selectionType: 'single',
 		};
 
@@ -101,11 +124,10 @@ const CytoscapeGraph: React.FC = () => {
 				data: {
 					source: source.id(),
 					target: target.id(),
-					weight: 123,
+					weight: Math.floor(Math.random() * 10 + 1),
 				},
 			}),
 
-			// TODO: prevent more than one edge between source and node
 			canConnect: (source: NodeSingular, target: NodeSingular) => source.id() !== target.id(),
 
 			snap: false,
@@ -114,27 +136,66 @@ const CytoscapeGraph: React.FC = () => {
 		// Инициализируем `edgehandles`
 		ehInstanceRef.current = cyInstanceRef.current.edgehandles(ehOptions);
 
+		// Определяем действие при выборе подсвеченного элемента
+		cyInstanceRef.current.on('select', '.highlighted,node', () =>
+			cyInstanceRef.current!.elements().removeClass('highlighted'),
+		);
+
+		// Определяем действие при выборе вершины
+		cyInstanceRef.current.on('select', 'node', (event: EventObject) => {
+			setSelectedGraphElements((previousSelectedGraphElements) => ({
+				nodes: [...previousSelectedGraphElements.nodes, event.target as NodeSingular],
+				edges: previousSelectedGraphElements.edges,
+			}));
+		});
+
+		// Определяем действие при отмене выбора вершины
+		cyInstanceRef.current.on('unselect', 'node', (event: EventObject) => {
+			setSelectedGraphElements((previousSelectedGraphElements) => ({
+				nodes: previousSelectedGraphElements.nodes.filter((node) => node.id() !== event.target.id()),
+				edges: previousSelectedGraphElements.edges,
+			}));
+		});
+
+		// Определяем действие при выборе ребра
+		cyInstanceRef.current.on('select', 'edge', (event: EventObject) => {
+			setSelectedGraphElements((previousSelectedGraphElements) => ({
+				nodes: previousSelectedGraphElements.nodes,
+				edges: [...previousSelectedGraphElements.edges, event.target as EdgeSingular],
+			}));
+		});
+
+		// Определяем действие при отмене выбора ребра
+		cyInstanceRef.current.on('unselect', 'edge', (event: EventObject) => {
+			setSelectedGraphElements((previousSelectedGraphElements) => ({
+				nodes: previousSelectedGraphElements.nodes.filter((node) => node.id() !== event.target.id()),
+				edges: previousSelectedGraphElements.edges.filter((edge) => edge.id() !== event.target.id()),
+			}));
+		});
+
 		return () => {
 			cyInstanceRef.current?.destroy();
 			ehInstanceRef.current?.destroy();
 		};
 	}, []);
 
+	// Эффект при изменении элементов графа
 	useEffect(() => {
-		const cyInstance = cyInstanceRef.current;
-
-		if (cyInstance == null) {
+		if (cyInstanceRef.current === null) {
 			return console.warn('cyInstanceRef.current is null');
 		}
 
-		// Удалаяем все элементы текущего графа
-		cyInstance.elements().remove();
+		// Удаляем все выбранные элементы текущего графа
+		setSelectedGraphElements(() => ({ nodes: [], edges: [] }));
+
+		// Удаляем все элементы текущего графа
+		cyInstanceRef.current.elements().remove();
 
 		// Добавляем новые элементы
-		cyInstance.add([...graphElements.nodes, ...graphElements.edges]);
+		cyInstanceRef.current.add([...graphElements.nodes, ...graphElements.edges]);
 
 		// Позиционируем элементы графа
-		cyInstance.layout({ name: 'circle' }).run();
+		cyInstanceRef.current.layout({ name: 'circle' }).run();
 	}, [graphElements]);
 
 	return (
@@ -143,10 +204,18 @@ const CytoscapeGraph: React.FC = () => {
 				ref={cyRef}
 				style={{
 					height: '100vh',
-					width: '100wh',
+					width: '100vw',
 				}}
 			/>
-			<GraphElementsContext.Provider value={{ graphElements, setGraphElements }}>
+
+			<GraphElementsContext.Provider
+				value={{
+					graphElements,
+					setGraphElements,
+					selectedGraphElements,
+					setSelectedGraphElements,
+				}}
+			>
 				<CyInstanceRefContext.Provider value={cyInstanceRef}>
 					<EhInstanceRefContext.Provider value={ehInstanceRef}>
 						<ControlPanel />
@@ -157,6 +226,8 @@ const CytoscapeGraph: React.FC = () => {
 		</>
 	);
 };
+
+export type { GraphElements };
 
 export { GraphElementsContext, CyInstanceRefContext, EhInstanceRefContext };
 

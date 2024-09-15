@@ -385,9 +385,9 @@ const controlFunctions = {
 				const edgesFromPreviousToCurrent = previousNode.edgesTo(currentNode);
 
 				let minWeightForEdgesFromPreviousToCurrent = Infinity;
-				edgesFromPreviousToCurrent.edges().forEach(edge => {
+				edgesFromPreviousToCurrent.edges().forEach((edge) => {
 					const edgeWeight = edge.data('weight');
-					
+
 					if (!(edgeWeight < minWeightForEdgesFromPreviousToCurrent)) {
 						return;
 					}
@@ -395,15 +395,15 @@ const controlFunctions = {
 					minWeightForEdgesFromPreviousToCurrent = edgeWeight;
 				});
 
-				console.log(`Min weight: ${minWeightForEdgesFromPreviousToCurrent}`)
+				console.log(`Min weight: ${minWeightForEdgesFromPreviousToCurrent}`);
 
-				edgesFromPreviousToCurrent.forEach(edge => {
+				edgesFromPreviousToCurrent.forEach((edge) => {
 					if (edge.data('weight') !== minWeightForEdgesFromPreviousToCurrent) {
 						return;
 					}
 
 					edge.addClass('highlighted');
-				})
+				});
 
 				// edgesFromPreviousToCurrent.edges(`[weight = '${minWeightForEdgesFromPreviousToCurrent}']`).addClass('highlighted');
 			}

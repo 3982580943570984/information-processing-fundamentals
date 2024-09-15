@@ -4,8 +4,25 @@ export const metadata = {
 
 const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 	return (
-		<html lang="en">
-			<body>{children}</body>
+		<html
+			lang="en"
+			style={{
+				margin: 0,
+				padding: 0,
+				height: '100%',
+				overflow: 'hidden',
+			}}
+		>
+			<body
+				style={{
+					margin: 0,
+					padding: 0,
+					height: '100%',
+					overflow: 'hidden',
+				}}
+			>
+				{children}
+			</body>
 		</html>
 	);
 };
