@@ -8,7 +8,19 @@ import floydWarshall, { getPathToTargetFloydWarshall } from '../algorithms/floyd
 import { CyInstanceRefContext, EhInstanceRefContext, GraphElementsContext } from './graph';
 import { Rnd } from 'react-rnd';
 
+type Packet = {
+	id: number;
+	source: NodeSingular;
+	target: NodeSingular;
+	current: NodeSingular;
+	visited: Set<string>;
+	timeToLive: number;
+};
+
+let nextPacketId = 0;
+
 const ControlPanel: React.FC = () => {
+	console.log(`ControlPanel`);
 	const [, setDrawMode] = useState(false);
 	const [edgeWeight, setEdgeWeight] = useState(1);
 
@@ -55,20 +67,23 @@ const ControlPanel: React.FC = () => {
 	);
 
 	const animatePacket = useCallback(
-		(source: NodeSingular, target: NodeSingular) => {
+		(source: NodeSingular, target: NodeSingular, packetId: number) => {
+			console.log(`animatePacket`);
 			if (cyInstanceRef.current === null) return Promise.reject(new Error('Cytoscape instance not available'));
 
 			const sourcePosition = source.position();
 			let startTime: number | null = null;
 			const duration = 2000;
 
-			const packet = cyInstanceRef.current.add({
-				data: { label: `${source.data().label} -> ${target.data().label}` },
-				position: { ...sourcePosition },
-				classes: 'packet',
-			});
-
 			return new Promise<void>((resolve) => {
+				if (cyInstanceRef.current === null) return resolve();
+
+				const packet = cyInstanceRef.current.add({
+					data: { label: `${packetId}` },
+					position: { ...sourcePosition },
+					classes: 'packet',
+				});
+
 				const moveStep = (now: number) => {
 					if (startTime === null) startTime = now;
 					const elapsed = now - startTime;
@@ -87,7 +102,7 @@ const ControlPanel: React.FC = () => {
 					}
 
 					packet.remove();
-					resolve(); // Resolve the promise when the animation is done
+					resolve();
 				};
 
 				requestAnimationFrame(moveStep);
@@ -95,6 +110,84 @@ const ControlPanel: React.FC = () => {
 		},
 		[cyInstanceRef],
 	);
+
+	const randomWalkRouting = useCallback(
+		async (packet: Packet) => {
+			console.log(`randomWalkRouting`);
+			if (packet.current === packet.target) return;
+
+			if (packet.timeToLive === 0) return;
+
+			const neighbors = packet.current
+				.connectedEdges()
+				.targets()
+				.filter((node) => node.id() !== packet.source.id())
+				.nodes();
+
+			if (neighbors.length === 0) return;
+
+			let neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+			while (neighbor.id() === packet.current.id()) {
+				neighbor = neighbors[Math.floor(Math.random() * neighbors.length)];
+			}
+
+			await Promise.all([animatePacket(packet.current, neighbor, packet.id)]);
+
+			const newPacket: Packet = {
+				...packet,
+				current: neighbor,
+				visited: new Set(packet.visited),
+				timeToLive: packet.timeToLive - 1,
+			};
+
+			return randomWalkRouting(newPacket);
+		},
+		[animatePacket],
+	);
+
+	const floodingRouting = useCallback(
+		async (packet: Packet) => {
+			console.log(`floodingRouting`);
+			if (packet.current === packet.target) return;
+
+			if (packet.timeToLive === 0) return;
+
+			const neighbors = packet.current
+				.connectedEdges()
+				.targets()
+				.filter((node) => node.id() !== packet.source.id())
+				.nodes();
+
+			if (neighbors.length === 0) return;
+
+			// Создаем массив промисов для параллельной обработки
+			const promises = neighbors.map(async (neighbor) => {
+				if (packet.visited.has(neighbor.id())) return;
+
+				const updatedVisited = new Set(packet.visited);
+				updatedVisited.add(neighbor.id());
+
+				// Анимация пакета и рекурсивный вызов floodingRouting для нового пакета
+				await animatePacket(packet.current, neighbor, packet.id);
+
+				const newPacket: Packet = {
+					...packet,
+					current: neighbor,
+					visited: updatedVisited,
+					timeToLive: packet.timeToLive - 1,
+				};
+
+				// Рекурсивный вызов для соседнего узла
+				return floodingRouting(newPacket);
+			});
+
+			// Ожидаем завершения всех анимаций и рекурсивных вызовов
+			await Promise.all(promises);
+		},
+		[animatePacket],
+	);
+
+	const experienceBasedRouting = useCallback(async (packet: Packet) => {}, [animatePacket]);
 
 	useControls(
 		'Действия с графами',
@@ -466,21 +559,62 @@ const ControlPanel: React.FC = () => {
 	useControls(
 		'Алгоритмы маршрутизации',
 		{
-			Случайная: button(() => {
-				if (cyInstanceRef.current === null) {
-					return console.warn('cyInstanceRef.current is null');
-				}
+			Случайная: button(async () => {
+				if (cyInstanceRef.current === null) return console.warn('cyInstanceRef.current is null');
 
-				if (selectedGraphElements.nodes.length !== 2) {
+				if (selectedGraphElements.nodes.length !== 2)
 					return alert('Пожалуйста, выберите ровно две вершины для алгоритма случайной маршрутизации');
-				}
 
 				const [source, target] = selectedGraphElements.nodes;
 
-				animatePacket(source, target);
+				const packet: Packet = {
+					id: nextPacketId++,
+					source: source,
+					target: target,
+					current: source,
+					visited: new Set(),
+					timeToLive: 5,
+				};
+
+				await randomWalkRouting(packet);
 			}),
-			Лавинная: button(() => {}),
-			'По предыдущемы опыту': button(() => {}),
+			Лавинная: button(async () => {
+				if (cyInstanceRef.current === null) return console.warn('cyInstanceRef.current is null');
+
+				if (selectedGraphElements.nodes.length !== 2)
+					return alert('Пожалуйста, выберите ровно две вершины для алгоритма лавинной маршрутизации');
+
+				const [source, target] = selectedGraphElements.nodes;
+
+				const packet: Packet = {
+					id: nextPacketId++,
+					source: source,
+					target: target,
+					current: source,
+					visited: new Set(),
+					timeToLive: 5,
+				};
+
+				await floodingRouting(packet);
+			}),
+			'По предыдущемы опыту': button(async () => {
+				if (cyInstanceRef.current === null) return console.warn('cyInstanceRef.current is null');
+
+				if (selectedGraphElements.nodes.length !== 2)
+					return alert('Пожалуйста, выберите ровно две вершины для алгоритма маршрутизации по опыту');
+
+				const [source, target] = selectedGraphElements.nodes;
+
+				const packet: Packet = {
+					id: nextPacketId++,
+					source: source,
+					target: target,
+					current: source,
+					visited: new Set(),
+				};
+
+				await experienceBasedRouting(packet);
+			}),
 		},
 		[selectedGraphElements],
 	);
