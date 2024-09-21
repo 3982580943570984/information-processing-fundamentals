@@ -100,6 +100,15 @@ const CytoscapeGraph: React.FC = () => {
 						'transition-delay': '250ms',
 					},
 				},
+				{
+					selector: 'node.packet',
+					style: {
+						'background-color': 'red',
+						height: 20,
+						label: 'data(label)',
+						width: 20,
+					},
+				},
 			],
 			elements: [...graphElements.nodes, ...graphElements.edges],
 			layout: {

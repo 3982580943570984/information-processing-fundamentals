@@ -1,7 +1,7 @@
 'use client';
 
 import { EdgeCollection, NodeCollection, NodeSingular } from 'cytoscape';
-import { button, buttonGroup, useControls } from 'leva';
+import { button, useControls } from 'leva';
 import { useCallback, useContext, useState } from 'react';
 import dijkstra, { getPathToTargetDijkstra } from '../algorithms/dijkstra';
 import floydWarshall, { getPathToTargetFloydWarshall } from '../algorithms/floyd_warshall';
@@ -12,12 +12,14 @@ const ControlPanel: React.FC = () => {
 	const [, setDrawMode] = useState(false);
 	const [edgeWeight, setEdgeWeight] = useState(1);
 
-	const { graphElements, setGraphElements, setSelectedGraphElements } = useContext(GraphElementsContext);
+	const [dijkstraTextAreaValue, setDijkstraTextAreaValue] = useState<string>('');
+	const [floydWarshallTextAreaValue, setFloydWarshallTextAreaValue] = useState<string>('');
+
+	const { setGraphElements, selectedGraphElements, setSelectedGraphElements } = useContext(GraphElementsContext);
 
 	const cyInstanceRef = useContext(CyInstanceRefContext);
 	const ehInstanceRef = useContext(EhInstanceRefContext);
 
-	// Inside your component
 	const highlightPath = useCallback(
 		(pathToTarget: ArrayIterator<NodeSingular>, previousNode: NodeSingular | undefined = undefined) => {
 			const currentNode = pathToTarget.next().value;
@@ -52,15 +54,54 @@ const ControlPanel: React.FC = () => {
 		[],
 	);
 
+	const animatePacket = useCallback(
+		(source: NodeSingular, target: NodeSingular) => {
+			if (cyInstanceRef.current === null) return Promise.reject(new Error('Cytoscape instance not available'));
+
+			const sourcePosition = source.position();
+			let startTime: number | null = null;
+			const duration = 2000;
+
+			const packet = cyInstanceRef.current.add({
+				data: { label: `${source.data().label} -> ${target.data().label}` },
+				position: { ...sourcePosition },
+				classes: 'packet',
+			});
+
+			return new Promise<void>((resolve) => {
+				const moveStep = (now: number) => {
+					if (startTime === null) startTime = now;
+					const elapsed = now - startTime;
+
+					const newTargetPosition = target.position();
+					const progress = Math.min(elapsed / duration, 1);
+
+					const currentX = sourcePosition.x + progress * (newTargetPosition.x - sourcePosition.x);
+					const currentY = sourcePosition.y + progress * (newTargetPosition.y - sourcePosition.y);
+
+					packet.position({ x: currentX, y: currentY });
+
+					if (progress < 1) {
+						requestAnimationFrame(moveStep);
+						return;
+					}
+
+					packet.remove();
+					resolve(); // Resolve the promise when the animation is done
+				};
+
+				requestAnimationFrame(moveStep);
+			});
+		},
+		[cyInstanceRef],
+	);
+
 	useControls(
 		'Действия с графами',
 		{
 			'Добавить вершину': button(() => {
 				setGraphElements((previousGraphElements) => ({
-					nodes: [
-						...previousGraphElements.nodes,
-						{ data: { label: `n${previousGraphElements.nodes.length + 1}` } },
-					],
+					nodes: [...previousGraphElements.nodes, { data: { label: `n${previousGraphElements.nodes.length + 1}` } }],
 					edges: previousGraphElements.edges,
 				}));
 			}),
@@ -68,13 +109,9 @@ const ControlPanel: React.FC = () => {
 				setSelectedGraphElements((previousSelectedGraphElements) => {
 					const selectedNodeIds = previousSelectedGraphElements.nodes.map((node) => node.id());
 					setGraphElements((previousGraphElements) => ({
-						nodes: previousGraphElements.nodes.filter(
-							(node) => !selectedNodeIds.includes(node.data.id as string),
-						),
+						nodes: previousGraphElements.nodes.filter((node) => !selectedNodeIds.includes(node.data.id as string)),
 						edges: previousGraphElements.edges.filter(
-							(edge) =>
-								!selectedNodeIds.includes(edge.data.source) &&
-								!selectedNodeIds.includes(edge.data.target),
+							(edge) => !selectedNodeIds.includes(edge.data.source) && !selectedNodeIds.includes(edge.data.target),
 						),
 					}));
 					return previousSelectedGraphElements;
@@ -131,9 +168,7 @@ const ControlPanel: React.FC = () => {
 					const selectedEdgeIds = previousSelectedGraphElements.edges.map((edge) => edge.id());
 					setGraphElements((previousGraphElements) => ({
 						nodes: previousGraphElements.nodes,
-						edges: previousGraphElements.edges.filter(
-							(edge) => !selectedEdgeIds.includes(edge.data.id as string),
-						),
+						edges: previousGraphElements.edges.filter((edge) => !selectedEdgeIds.includes(edge.data.id as string)),
 					}));
 					return previousSelectedGraphElements;
 				});
@@ -153,286 +188,302 @@ const ControlPanel: React.FC = () => {
 				});
 			}),
 		},
+		{ collapsed: true },
 		[edgeWeight],
 	);
 
-	useControls('Примеры графов', {
-		'Простой граф': button(() => {
-			setGraphElements(() => ({
-				nodes: [
-					{ data: { id: 'n1', label: 'n1' } },
-					{ data: { id: 'n2', label: 'n2' } },
-					{ data: { id: 'n3', label: 'n3' } },
-				],
-				edges: [
-					{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
-					{ data: { id: 'e2', source: 'n2', target: 'n3', weight: 5 } },
-				],
-			}));
-		}),
-		'Средний граф': button(() => {
-			setGraphElements(() => ({
-				nodes: [
-					{ data: { id: 'n1', label: 'n1' } },
-					{ data: { id: 'n2', label: 'n2' } },
-					{ data: { id: 'n3', label: 'n3' } },
-					{ data: { id: 'n4', label: 'n4' } },
-				],
-				edges: [
-					{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
-					{ data: { id: 'e2', source: 'n2', target: 'n3', weight: 5 } },
-					{ data: { id: 'e3', source: 'n4', target: 'n3', weight: 4 } },
-					{ data: { id: 'e4', source: 'n4', target: 'n2', weight: 2 } },
-				],
-			}));
-		}),
-		'Сложный граф': button(() => {
-			setGraphElements(() => ({
-				nodes: [
-					{ data: { id: 'n1', label: 'n1' } },
-					{ data: { id: 'n2', label: 'n2' } },
-					{ data: { id: 'n3', label: 'n3' } },
-					{ data: { id: 'n4', label: 'n4' } },
-					{ data: { id: 'n5', label: 'n5' } },
-					{ data: { id: 'n6', label: 'n6' } },
-					{ data: { id: 'n7', label: 'n7' } },
-				],
-				edges: [
-					{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
-					{ data: { id: 'e2', source: 'n2', target: 'n3', weight: 5 } },
-					{ data: { id: 'e3', source: 'n3', target: 'n4', weight: 2 } },
-					{ data: { id: 'e4', source: 'n4', target: 'n5', weight: 4 } },
-					{ data: { id: 'e5', source: 'n5', target: 'n6', weight: 1 } },
-					{ data: { id: 'e6', source: 'n6', target: 'n7', weight: 7 } },
-					{ data: { id: 'e7', source: 'n7', target: 'n3', weight: 6 } },
-					{ data: { id: 'e8', source: 'n2', target: 'n5', weight: 8 } },
-					{ data: { id: 'e9', source: 'n4', target: 'n6', weight: 3 } },
-				],
-			}));
-		}),
-		'Случайный граф': button(() => {
-			const generateRandomGraph = (numNodes: number, numEdges: number) => {
-				const nodes = [];
-				const edges = [];
+	useControls(
+		'Примеры графов',
+		{
+			'Простой граф': button(() => {
+				setGraphElements(() => ({
+					nodes: [
+						{ data: { id: 'n1', label: 'n1' } },
+						{ data: { id: 'n2', label: 'n2' } },
+						{ data: { id: 'n3', label: 'n3' } },
+					],
+					edges: [
+						{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
+						{ data: { id: 'e2', source: 'n2', target: 'n3', weight: 5 } },
+					],
+				}));
+			}),
+			'Средний граф': button(() => {
+				setGraphElements(() => ({
+					nodes: [
+						{ data: { id: 'n1', label: 'n1' } },
+						{ data: { id: 'n2', label: 'n2' } },
+						{ data: { id: 'n3', label: 'n3' } },
+						{ data: { id: 'n4', label: 'n4' } },
+					],
+					edges: [
+						{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
+						{ data: { id: 'e2', source: 'n2', target: 'n3', weight: 5 } },
+						{ data: { id: 'e3', source: 'n4', target: 'n3', weight: 4 } },
+						{ data: { id: 'e4', source: 'n4', target: 'n2', weight: 2 } },
+					],
+				}));
+			}),
+			'Сложный граф': button(() => {
+				setGraphElements(() => ({
+					nodes: [
+						{ data: { id: 'n1', label: 'n1' } },
+						{ data: { id: 'n2', label: 'n2' } },
+						{ data: { id: 'n3', label: 'n3' } },
+						{ data: { id: 'n4', label: 'n4' } },
+						{ data: { id: 'n5', label: 'n5' } },
+						{ data: { id: 'n6', label: 'n6' } },
+						{ data: { id: 'n7', label: 'n7' } },
+					],
+					edges: [
+						{ data: { id: 'e1', source: 'n1', target: 'n2', weight: 3 } },
+						{ data: { id: 'e2', source: 'n2', target: 'n3', weight: 5 } },
+						{ data: { id: 'e3', source: 'n3', target: 'n4', weight: 2 } },
+						{ data: { id: 'e4', source: 'n4', target: 'n5', weight: 4 } },
+						{ data: { id: 'e5', source: 'n5', target: 'n6', weight: 1 } },
+						{ data: { id: 'e6', source: 'n6', target: 'n7', weight: 7 } },
+						{ data: { id: 'e7', source: 'n7', target: 'n3', weight: 6 } },
+						{ data: { id: 'e8', source: 'n2', target: 'n5', weight: 8 } },
+						{ data: { id: 'e9', source: 'n4', target: 'n6', weight: 3 } },
+					],
+				}));
+			}),
+			'Случайный граф': button(() => {
+				const generateRandomGraph = (numNodes: number, numEdges: number) => {
+					const nodes = [];
+					const edges = [];
 
-				for (let i = 1; i <= numNodes; i++) {
-					nodes.push({ data: { id: `n${i}`, label: `n${i}` } });
-				}
-
-				for (let i = 0; i < numEdges; i++) {
-					const source = `n${Math.ceil(Math.random() * numNodes)}`;
-					let target = `n${Math.ceil(Math.random() * numNodes)}`;
-
-					while (target === source) {
-						target = `n${Math.ceil(Math.random() * numNodes)}`;
+					for (let i = 1; i <= numNodes; i++) {
+						nodes.push({ data: { id: `n${i}`, label: `n${i}` } });
 					}
 
-					const weight = Math.floor(Math.random() * 25) + 1;
-					edges.push({ data: { source, target, weight } });
-				}
+					for (let i = 0; i < numEdges; i++) {
+						const source = `n${Math.ceil(Math.random() * numNodes)}`;
+						let target = `n${Math.ceil(Math.random() * numNodes)}`;
 
-				return { nodes, edges };
-			};
+						while (target === source) {
+							target = `n${Math.ceil(Math.random() * numNodes)}`;
+						}
 
-			const numNodes = Math.floor(Math.random() * 10) + 5;
-			const numEdges = Math.floor(Math.random() * 10) + 5;
-			const randomGraph = generateRandomGraph(numNodes, numEdges);
+						const weight = Math.floor(Math.random() * 25) + 1;
+						edges.push({ data: { source, target, weight } });
+					}
 
-			setGraphElements(randomGraph);
-		}),
-	});
+					return { nodes, edges };
+				};
 
-	useControls('Сортировка графов', {
-		Circle: button(() => cyInstanceRef.current?.layout({ name: 'circle' }).run()),
-		Random: button(() => cyInstanceRef.current?.layout({ name: 'random' }).run()),
-		Cose: button(() => cyInstanceRef.current?.layout({ name: 'cose' }).run()),
-		Breadthfirst: button(() => cyInstanceRef.current?.layout({ name: 'breadthfirst' }).run()),
-		Concentric: button(() => cyInstanceRef.current?.layout({ name: 'concentric' }).run()),
-	});
+				const numNodes = Math.floor(Math.random() * 10) + 5;
+				const numEdges = Math.floor(Math.random() * 10) + 5;
+				const randomGraph = generateRandomGraph(numNodes, numEdges);
 
-	let dijkstraDistance: Map<NodeSingular, number>[] = [];
-	let dijkstraPrevious: Map<NodeSingular, NodeSingular | undefined>[] = [];
-	let dijkstraTime: number = 0;
-	const [dijkstraTextAreaValue, setDijkstraTextAreaValue] = useState<string>('');
+				setGraphElements(randomGraph);
+			}),
+		},
+		{ collapsed: true },
+	);
 
-	let floydWarshallDistance: Map<NodeSingular, Map<NodeSingular, number>> | undefined;
-	let floydWarshallPrevious: Map<NodeSingular, Map<NodeSingular, NodeSingular | undefined>> | undefined;
-	let floydWarshallTime: number = 0;
-	const [floydWarshallTextAreaValue, setFloydWarshallTextAreaValue] = useState<string>();
+	useControls(
+		'Сортировка графов',
+		{
+			Circle: button(() => cyInstanceRef.current?.layout({ name: 'circle' }).run()),
+			Random: button(() => cyInstanceRef.current?.layout({ name: 'random' }).run()),
+			Cose: button(() => cyInstanceRef.current?.layout({ name: 'cose' }).run()),
+			Breadthfirst: button(() => cyInstanceRef.current?.layout({ name: 'breadthfirst' }).run()),
+			Concentric: button(() => cyInstanceRef.current?.layout({ name: 'concentric' }).run()),
+		},
+		{
+			collapsed: true,
+		},
+	);
 
-	useControls('Поиск кратчайшего пути', {
-		'Алгоритм Дейкстры': button(() => {
-			setSelectedGraphElements((previousSelectedGraphElements) => {
+	useControls(
+		'Поиск кратчайшего пути',
+		{
+			'Алгоритм Дейкстры': button(() => {
+				setSelectedGraphElements((previousSelectedGraphElements) => {
+					if (cyInstanceRef.current === null) {
+						console.warn('cyInstanceRef.current is null');
+						return previousSelectedGraphElements;
+					}
+
+					if (previousSelectedGraphElements.nodes.length !== 2) {
+						alert('Пожалуйста, выберите ровно две вершины для использования алгоритма Дейкстры');
+						return previousSelectedGraphElements;
+					}
+
+					const [nodes, edges] = [cyInstanceRef.current.nodes(), cyInstanceRef.current.edges()];
+
+					const [source, target] = previousSelectedGraphElements.nodes;
+
+					const { distance, previous } = dijkstra({ nodes, edges }, source);
+
+					const distanceFromSourceToTarget = distance.get(target);
+
+					console.log(`Dijkstra: distance from ${source.id()} to ${target.id()}: ${distanceFromSourceToTarget}`);
+
+					const pathToTarget: NodeSingular[] = getPathToTargetDijkstra(source, target, previous);
+
+					console.log(`Dijkstra: path from ${source.id()} to ${target.id()}: ${pathToTarget.map((node) => node.id())}`);
+
+					cyInstanceRef.current.elements().unselect();
+
+					if (pathToTarget.length !== 1) {
+						highlightPath(pathToTarget.values());
+					} else {
+						alert('Путь между вершинами отсутствует');
+					}
+
+					return previousSelectedGraphElements;
+				});
+			}),
+			'Алгоритм Флойда — Уоршелла': button(() => {
+				setSelectedGraphElements((previousSelectedGraphElements) => {
+					if (cyInstanceRef.current === null) {
+						console.warn('cyInstanceRef.current is null');
+						return previousSelectedGraphElements;
+					}
+
+					if (previousSelectedGraphElements.nodes.length !== 2) {
+						alert('Пожалуйста, выберите ровно две вершины для использования алгоритма Флойда - Уоршелла');
+						return previousSelectedGraphElements;
+					}
+
+					const [nodes, edges] = [cyInstanceRef.current.nodes(), cyInstanceRef.current.edges()];
+
+					const [source, target] = previousSelectedGraphElements.nodes;
+
+					const { distance, previous } = floydWarshall({ nodes, edges });
+
+					const distanceFromSourceToTarget = distance.get(source)?.get(target);
+
+					console.log(`Floyd-Warshall: distance from ${source.id()} to ${target.id()}: ${distanceFromSourceToTarget}`);
+
+					const pathToTarget: NodeSingular[] = getPathToTargetFloydWarshall(source, target, previous);
+
+					console.log(
+						`Floyd-Warshall: path from ${source.id()} to ${target.id()}: ${pathToTarget.map((node) => node.id())}`,
+					);
+
+					cyInstanceRef.current.elements().unselect();
+
+					if (pathToTarget.length !== 1) {
+						highlightPath(pathToTarget.values());
+					}
+
+					return previousSelectedGraphElements;
+				});
+			}),
+			'Сравнить алгоритмы': button(() => {
 				if (cyInstanceRef.current === null) {
-					console.warn('cyInstanceRef.current is null');
-					return previousSelectedGraphElements;
-				}
-
-				if (previousSelectedGraphElements.nodes.length !== 2) {
-					alert('Пожалуйста, выберите ровно две вершины для использования алгоритма Дейкстры');
-					return previousSelectedGraphElements;
+					return console.warn('cyInstanceRef.current is null');
 				}
 
 				const [nodes, edges] = [cyInstanceRef.current.nodes(), cyInstanceRef.current.edges()];
 
-				const [source, target] = previousSelectedGraphElements.nodes;
+				// Замеры алгоритма Дейкстры
+				let dijkstraTime = 0;
+				const dijkstraDistance: Map<NodeSingular, number>[] = [];
+				const dijkstraPrevious: Map<NodeSingular, NodeSingular | undefined>[] = [];
 
-				const { distance, previous } = dijkstra({ nodes, edges }, source);
+				const runDijkstra = (nodes: NodeCollection, edges: EdgeCollection, source: NodeSingular) => {
+					const startTime = performance.now();
+					const { distance, previous } = dijkstra({ nodes, edges }, source);
+					const endTime = performance.now();
 
-				const distanceFromSourceToTarget = distance.get(target);
+					dijkstraDistance.push(distance); // Добавляем результат без использования setState
+					dijkstraPrevious.push(previous); // То же для previous
+					dijkstraTime += endTime - startTime;
+				};
 
-				console.log(`Dijkstra: distance from ${source.id()} to ${target.id()}: ${distanceFromSourceToTarget}`);
+				nodes.forEach((source) => runDijkstra(nodes, edges, source));
 
-				const pathToTarget: NodeSingular[] = getPathToTargetDijkstra(source, target, previous);
+				let dijkstraText = `Время исполнения алгоритма: ${dijkstraTime.toPrecision(7)} миллисекунд\n\n`;
 
-				console.log(
-					`Dijkstra: path from ${source.id()} to ${target.id()}: ${pathToTarget.map((node) => node.id())}`,
-				);
+				nodes.forEach((source, index) => {
+					nodes.forEach((target) => {
+						if (source !== target) {
+							const distanceFromSourceToTarget = dijkstraDistance[index].get(target);
+							const pathToTarget: NodeSingular[] = getPathToTargetDijkstra(source, target, dijkstraPrevious[index]);
 
-				cyInstanceRef.current.elements().unselect();
+							if (distanceFromSourceToTarget !== undefined && distanceFromSourceToTarget !== Infinity) {
+								dijkstraText += `Кратчайший путь между ${source.id()} и ${target.id()}: ${pathToTarget
+									.map((node) => node.id())
+									.join(' -> ')}, Дистанция: ${distanceFromSourceToTarget}\n`;
+							} else {
+								dijkstraText += `Путь между ${source.id()} и ${target.id()} не найден\n`;
+							}
+						}
+					});
+				});
 
-				if (pathToTarget.length !== 1) {
-					highlightPath(pathToTarget.values());
-				} else {
-					alert('Путь между вершинами отсутствует');
-				}
+				setDijkstraTextAreaValue(dijkstraText); // Обновляем только текстовое поле
 
-				return previousSelectedGraphElements;
-			});
-		}),
-		'Алгоритм Флойда — Уоршелла': button(() => {
-			setSelectedGraphElements((previousSelectedGraphElements) => {
+				// Замеры алгоритма Флойда - Уоршелла
+				let floydWarshallTime = 0;
+				let floydWarshallDistance: Map<NodeSingular, Map<NodeSingular, number>> | undefined;
+				let floydWarshallPrevious: Map<NodeSingular, Map<NodeSingular, NodeSingular | undefined>> | undefined;
+
+				const runFloydWarshall = (nodes: NodeCollection, edges: EdgeCollection) => {
+					const startTime = performance.now();
+					const { distance, previous } = floydWarshall({ nodes, edges });
+					const endTime = performance.now();
+
+					floydWarshallDistance = distance; // Сохраняем результат в переменные
+					floydWarshallPrevious = previous;
+					floydWarshallTime = endTime - startTime;
+				};
+
+				runFloydWarshall(nodes, edges);
+
+				let floydWarshallText = `Время исполнения алгоритма: ${floydWarshallTime.toPrecision(7)} миллисекунд\n\n`;
+
+				nodes.forEach((source) => {
+					nodes.forEach((target) => {
+						if (source !== target) {
+							const distanceFromSourceToTarget = floydWarshallDistance?.get(source)?.get(target);
+							const pathToTarget: NodeSingular[] = getPathToTargetFloydWarshall(source, target, floydWarshallPrevious!);
+
+							if (distanceFromSourceToTarget !== undefined) {
+								floydWarshallText += `Кратчайший путь между ${source.id()} и ${target.id()}: ${pathToTarget
+									.map((node) => node.id())
+									.join(' -> ')}, Дистанция: ${distanceFromSourceToTarget}\n`;
+							} else {
+								floydWarshallText += `Путь между ${source.id()} и ${target.id()} не найден\n`;
+							}
+						}
+					});
+				});
+
+				setFloydWarshallTextAreaValue(floydWarshallText); // Обновляем только текстовое поле
+			}),
+		},
+		{
+			collapsed: true,
+		},
+	);
+
+	// TODO: TTL для лавинного алгоритма
+	useControls(
+		'Алгоритмы маршрутизации',
+		{
+			Случайная: button(() => {
 				if (cyInstanceRef.current === null) {
-					console.warn('cyInstanceRef.current is null');
-					return previousSelectedGraphElements;
+					return console.warn('cyInstanceRef.current is null');
 				}
 
-				if (previousSelectedGraphElements.nodes.length !== 2) {
-					alert('Пожалуйста, выберите ровно две вершины для использования алгоритма Флойда - Уоршелла');
-					return previousSelectedGraphElements;
+				if (selectedGraphElements.nodes.length !== 2) {
+					return alert('Пожалуйста, выберите ровно две вершины для алгоритма случайной маршрутизации');
 				}
 
-				const [nodes, edges] = [cyInstanceRef.current.nodes(), cyInstanceRef.current.edges()];
+				const [source, target] = selectedGraphElements.nodes;
 
-				const [source, target] = previousSelectedGraphElements.nodes;
-
-				const { distance, previous } = floydWarshall({ nodes, edges });
-
-				const distanceFromSourceToTarget = distance.get(source)?.get(target);
-
-				console.log(
-					`Floyd-Warshall: distance from ${source.id()} to ${target.id()}: ${distanceFromSourceToTarget}`,
-				);
-
-				const pathToTarget: NodeSingular[] = getPathToTargetFloydWarshall(source, target, previous);
-
-				console.log(
-					`Floyd-Warshall: path from ${source.id()} to ${target.id()}: ${pathToTarget.map((node) =>
-						node.id(),
-					)}`,
-				);
-
-				cyInstanceRef.current.elements().unselect();
-
-				if (pathToTarget.length !== 1) {
-					highlightPath(pathToTarget.values());
-				}
-
-				return previousSelectedGraphElements;
-			});
-		}),
-		'Сравнить алгоритмы': button(() => {
-			if (cyInstanceRef.current === null) {
-				return console.warn('cyInstanceRef.current is null');
-			}
-
-			const [nodes, edges] = [cyInstanceRef.current.nodes(), cyInstanceRef.current.edges()];
-
-			// Замеры алгоритма Дейкстры
-			let dijkstraTime = 0;
-			let dijkstraDistance: Map<NodeSingular, number>[] = [];
-			let dijkstraPrevious: Map<NodeSingular, NodeSingular | undefined>[] = [];
-
-			const runDijkstra = (nodes: NodeCollection, edges: EdgeCollection, source: NodeSingular) => {
-				const startTime = performance.now();
-				const { distance, previous } = dijkstra({ nodes, edges }, source);
-				const endTime = performance.now();
-
-				dijkstraDistance.push(distance); // Добавляем результат без использования setState
-				dijkstraPrevious.push(previous); // То же для previous
-				dijkstraTime += endTime - startTime;
-			};
-
-			nodes.forEach((source) => runDijkstra(nodes, edges, source));
-
-			let dijkstraText = `Время исполнения алгоритма: ${dijkstraTime.toPrecision(7)} миллисекунд\n\n`;
-
-			nodes.forEach((source, index) => {
-				nodes.forEach((target) => {
-					if (source !== target) {
-						const distanceFromSourceToTarget = dijkstraDistance[index].get(target);
-						const pathToTarget: NodeSingular[] = getPathToTargetDijkstra(
-							source,
-							target,
-							dijkstraPrevious[index],
-						);
-
-						if (distanceFromSourceToTarget !== undefined && distanceFromSourceToTarget !== Infinity) {
-							dijkstraText += `Кратчайший путь между ${source.id()} и ${target.id()}: ${pathToTarget
-								.map((node) => node.id())
-								.join(' -> ')}, Дистанция: ${distanceFromSourceToTarget}\n`;
-						} else {
-							dijkstraText += `Путь между ${source.id()} и ${target.id()} не найден\n`;
-						}
-					}
-				});
-			});
-
-			setDijkstraTextAreaValue(dijkstraText); // Обновляем только текстовое поле
-
-			// Замеры алгоритма Флойда - Уоршелла
-			let floydWarshallTime = 0;
-			let floydWarshallDistance: Map<NodeSingular, Map<NodeSingular, number>> | undefined;
-			let floydWarshallPrevious: Map<NodeSingular, Map<NodeSingular, NodeSingular | undefined>> | undefined;
-
-			const runFloydWarshall = (nodes: NodeCollection, edges: EdgeCollection) => {
-				const startTime = performance.now();
-				const { distance, previous } = floydWarshall({ nodes, edges });
-				const endTime = performance.now();
-
-				floydWarshallDistance = distance; // Сохраняем результат в переменные
-				floydWarshallPrevious = previous;
-				floydWarshallTime = endTime - startTime;
-			};
-
-			runFloydWarshall(nodes, edges);
-
-			let floydWarshallText = `Время исполнения алгоритма: ${floydWarshallTime.toPrecision(7)} миллисекунд\n\n`;
-
-			nodes.forEach((source) => {
-				nodes.forEach((target) => {
-					if (source !== target) {
-						const distanceFromSourceToTarget = floydWarshallDistance?.get(source)?.get(target);
-						const pathToTarget: NodeSingular[] = getPathToTargetFloydWarshall(
-							source,
-							target,
-							floydWarshallPrevious!,
-						);
-
-						if (distanceFromSourceToTarget !== undefined) {
-							floydWarshallText += `Кратчайший путь между ${source.id()} и ${target.id()}: ${pathToTarget
-								.map((node) => node.id())
-								.join(' -> ')}, Дистанция: ${distanceFromSourceToTarget}\n`;
-						} else {
-							floydWarshallText += `Путь между ${source.id()} и ${target.id()} не найден\n`;
-						}
-					}
-				});
-			});
-
-			setFloydWarshallTextAreaValue(floydWarshallText); // Обновляем только текстовое поле
-		}),
-	});
+				animatePacket(source, target);
+			}),
+			Лавинная: button(() => {}),
+			'По предыдущемы опыту': button(() => {}),
+		},
+		[selectedGraphElements],
+	);
 
 	return (
 		<Rnd
