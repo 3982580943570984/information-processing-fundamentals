@@ -2,11 +2,12 @@
 
 import { EdgeCollection, NodeCollection, NodeSingular } from 'cytoscape';
 import { button, useControls } from 'leva';
-import { useCallback, useContext, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { Rnd } from 'react-rnd';
 import dijkstra, { getPathToTargetDijkstra } from '../algorithms/dijkstra';
 import floydWarshall, { getPathToTargetFloydWarshall } from '../algorithms/floyd_warshall';
+import { RoutingTableContext } from '../contexts/routing_table';
 import { CyInstanceRefContext, EhInstanceRefContext, GraphElementsContext } from './cytoscape_graph';
-import { Rnd } from 'react-rnd';
 
 type Packet = {
 	id: number;
@@ -20,17 +21,25 @@ type Packet = {
 let nextPacketId = 0;
 
 const ControlPanel: React.FC = () => {
-	console.log(`ControlPanel`);
 	const [, setDrawMode] = useState(false);
 	const [edgeWeight, setEdgeWeight] = useState(1);
 
 	const [dijkstraTextAreaValue, setDijkstraTextAreaValue] = useState<string>('');
 	const [floydWarshallTextAreaValue, setFloydWarshallTextAreaValue] = useState<string>('');
 
-	const { setGraphElements, selectedGraphElements, setSelectedGraphElements } = useContext(GraphElementsContext);
+	const { graphElements, setGraphElements, selectedGraphElements, setSelectedGraphElements } =
+		useContext(GraphElementsContext);
 
 	const cyInstanceRef = useContext(CyInstanceRefContext);
 	const ehInstanceRef = useContext(EhInstanceRefContext);
+
+	const routingTableContext = useContext(RoutingTableContext);
+
+	if (!routingTableContext) {
+		throw new Error('ControlPanel must be used within a RoutingTableProvider');
+	}
+
+	const { routingTable, updateRoutingTable } = routingTableContext;
 
 	const highlightPath = useCallback(
 		(pathToTarget: ArrayIterator<NodeSingular>, previousNode: NodeSingular | undefined = undefined) => {
@@ -68,8 +77,7 @@ const ControlPanel: React.FC = () => {
 
 	const animatePacket = useCallback(
 		(source: NodeSingular, target: NodeSingular, packetId: number) => {
-			console.log(`animatePacket`);
-			if (cyInstanceRef.current === null) return Promise.reject(new Error('Cytoscape instance not available'));
+			if (!cyInstanceRef.current) return Promise.reject(new Error('Cytoscape instance not available'));
 
 			const sourcePosition = source.position();
 			let startTime: number | null = null;
@@ -108,12 +116,29 @@ const ControlPanel: React.FC = () => {
 				requestAnimationFrame(moveStep);
 			});
 		},
-		[cyInstanceRef],
+		[cyInstanceRef.current],
 	);
+
+	const refreshRoutingTable = useCallback(() => {
+		if (!cyInstanceRef.current) return;
+
+		cyInstanceRef.current.nodes().forEach((node) => {
+			updateRoutingTable(node.id(), node.id(), 0);
+
+			node
+				.connectedEdges()
+				.targets()
+				.filter((neighbor) => node.id() !== neighbor.id())
+				.forEach((neighbor) => {
+					updateRoutingTable(node.id(), neighbor.id(), 1);
+				});
+		});
+	}, [cyInstanceRef.current]);
+
+	useEffect(() => refreshRoutingTable(), [graphElements, refreshRoutingTable]);
 
 	const randomWalkRouting = useCallback(
 		async (packet: Packet) => {
-			console.log(`randomWalkRouting`);
 			if (packet.current === packet.target) return;
 
 			if (packet.timeToLive === 0) return;
@@ -147,7 +172,6 @@ const ControlPanel: React.FC = () => {
 
 	const floodingRouting = useCallback(
 		async (packet: Packet) => {
-			console.log(`floodingRouting`);
 			if (packet.current === packet.target) return;
 
 			if (packet.timeToLive === 0) return;
@@ -187,7 +211,86 @@ const ControlPanel: React.FC = () => {
 		[animatePacket],
 	);
 
-	const experienceBasedRouting = useCallback(async (packet: Packet) => {}, [animatePacket]);
+	const experienceBasedRouting = useCallback(
+		async (packet: Packet) => {
+			if (!cyInstanceRef.current) return console.warn('cyInstanceRef.current is null');
+
+			if (packet.current.id() === packet.target.id())
+				return console.log(`Packet ${packet.id} has arrived at destination ${packet.target.id()}`);
+
+			packet.visited.add(packet.current.id());
+
+			const packetPathArray = Array.from(packet.visited);
+			const currentRouterId = packet.current.id();
+
+			for (let i = 0; i < packetPathArray.length - 1; i++) {
+				const routerId = packetPathArray[i];
+				const hops = packetPathArray.length - i - 1;
+
+				updateRoutingTable(currentRouterId, routerId, hops);
+				console.log(`Router ${currentRouterId}: Updated routing entry to ${routerId} with ${hops} hops`);
+			}
+
+			const nextHops: NodeSingular[] = [];
+			let minHops: number = Infinity;
+
+			const neighbors = packet.current
+				.connectedEdges()
+				.targets()
+				.filter((node) => node.id() !== packet.current.id());
+
+			neighbors.forEach((neighbor) => {
+				if (packet.visited.has(neighbor.id())) return;
+
+				const neighborRoutingTable = routingTable.get(neighbor.id());
+
+				console.log(`neighborRoutingTable: ${neighborRoutingTable}`);
+
+				if (neighborRoutingTable === undefined) return;
+
+				const hopsToDest = neighborRoutingTable.get(packet.target.id());
+
+				console.log(`hopsToDest: ${hopsToDest}`);
+
+				if (hopsToDest === undefined) return;
+
+				if (hopsToDest > minHops) return;
+
+				if (hopsToDest < minHops) nextHops.length = 0;
+
+				minHops = hopsToDest;
+				nextHops.push(neighbor);
+			});
+
+			if (packet.current.id() === 'n3') {
+				console.log(minHops, nextHops);
+			}
+
+			if (nextHops.length === 0) {
+				for (const neighbor of neighbors) {
+					if (packet.visited.has(neighbor.id())) continue;
+
+					nextHops.push(neighbor);
+				}
+			}
+
+			if (nextHops.length === 0)
+				return console.log(`Router ${currentRouterId}: No available neighbors to forward the packet`);
+
+			const nextHop = nextHops[Math.floor(Math.random() * nextHops.length)];
+
+			await animatePacket(packet.current, nextHop, packet.id);
+
+			const newPacket: Packet = {
+				...packet,
+				current: nextHop,
+				visited: new Set(packet.visited),
+			};
+
+			return experienceBasedRouting(newPacket);
+		},
+		[animatePacket, routingTable, updateRoutingTable, cyInstanceRef],
+	);
 
 	useControls(
 		'Действия с графами',
@@ -555,7 +658,6 @@ const ControlPanel: React.FC = () => {
 		},
 	);
 
-	// TODO: TTL для лавинного алгоритма
 	useControls(
 		'Алгоритмы маршрутизации',
 		{
@@ -597,7 +699,7 @@ const ControlPanel: React.FC = () => {
 
 				await floodingRouting(packet);
 			}),
-			'По предыдущемы опыту': button(async () => {
+			'По предыдущему опыту': button(async () => {
 				if (cyInstanceRef.current === null) return console.warn('cyInstanceRef.current is null');
 
 				if (selectedGraphElements.nodes.length !== 2)
@@ -611,12 +713,15 @@ const ControlPanel: React.FC = () => {
 					target: target,
 					current: source,
 					visited: new Set(),
+					timeToLive: 10,
 				};
+
+				refreshRoutingTable();
 
 				await experienceBasedRouting(packet);
 			}),
 		},
-		[selectedGraphElements],
+		[selectedGraphElements, randomWalkRouting, floodingRouting, experienceBasedRouting],
 	);
 
 	return (

@@ -11,8 +11,10 @@ import cytoscape, {
 } from 'cytoscape';
 import edgehandles, { EdgeHandlesInstance, EdgeHandlesOptions } from 'cytoscape-edgehandles';
 import { createContext, MutableRefObject, useEffect, useRef, useState } from 'react';
+import { RoutingTableProvider } from '../contexts/routing_table';
 import AdjacencyMatrix from './adjacency_matrix';
 import ControlPanel from './control_panel';
+import RoutingTable from './routing_table';
 
 type GraphElements = {
 	nodes: NodeDefinition[];
@@ -190,9 +192,7 @@ const CytoscapeGraph: React.FC = () => {
 
 	// Эффект при изменении элементов графа
 	useEffect(() => {
-		if (cyInstanceRef.current === null) {
-			return console.warn('cyInstanceRef.current is null');
-		}
+		if (!cyInstanceRef.current) return console.warn('cyInstanceRef.current is null');
 
 		// Удаляем все выбранные элементы текущего графа
 		setSelectedGraphElements(() => ({ nodes: [], edges: [] }));
@@ -227,8 +227,11 @@ const CytoscapeGraph: React.FC = () => {
 			>
 				<CyInstanceRefContext.Provider value={cyInstanceRef}>
 					<EhInstanceRefContext.Provider value={ehInstanceRef}>
-						<ControlPanel />
-						<AdjacencyMatrix />
+						<RoutingTableProvider>
+							<ControlPanel />
+							<RoutingTable />
+							<AdjacencyMatrix />
+						</RoutingTableProvider>
 					</EhInstanceRefContext.Provider>
 				</CyInstanceRefContext.Provider>
 			</GraphElementsContext.Provider>
