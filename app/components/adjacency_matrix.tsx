@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useContext, useEffect } from 'react';
 import { useReactTable, getCoreRowModel, ColumnDef, flexRender } from '@tanstack/react-table';
-import { GraphElementsContext } from './graph';
+import { GraphElementsContext } from './cytoscape_graph';
 import { Rnd } from 'react-rnd';
 
 type MatrixCell = number;
@@ -49,18 +49,12 @@ const AdjacencyMatrix: React.FC = () => {
 
 										if (weight > 25) weight = 25;
 
-										const source = previousGraphElements.nodes.find(
-											(node) => node.data.label === `n${row.index + 1}`,
-										);
+										const source = previousGraphElements.nodes.find((node) => node.data.label === `n${row.index + 1}`);
 
-										const target = previousGraphElements.nodes.find(
-											(node) => node.data.label === `n${column.id}`,
-										);
+										const target = previousGraphElements.nodes.find((node) => node.data.label === `n${column.id}`);
 
 										const edge = previousGraphElements.edges.find(
-											(edge) =>
-												edge.data.source === source?.data.id &&
-												edge.data.target === target?.data.id,
+											(edge) => edge.data.source === source?.data.id && edge.data.target === target?.data.id,
 										);
 
 										if (weight === 0) {
@@ -268,9 +262,7 @@ const AdjacencyMatrix: React.FC = () => {
 											backgroundColor: '#23272a',
 										}}
 									>
-										{header.isPlaceholder
-											? null
-											: flexRender(header.column.columnDef.header, header.getContext())}
+										{header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
 									</th>
 								))}
 							</tr>

@@ -1,4 +1,4 @@
-import CytoscapeGraph from './components/graph';
+import CytoscapeGraph from './components/cytoscape_graph';
 
 const Root: React.FC = () => <CytoscapeGraph />;
 

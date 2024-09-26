@@ -5,7 +5,7 @@ import { button, useControls } from 'leva';
 import { useCallback, useContext, useState } from 'react';
 import dijkstra, { getPathToTargetDijkstra } from '../algorithms/dijkstra';
 import floydWarshall, { getPathToTargetFloydWarshall } from '../algorithms/floyd_warshall';
-import { CyInstanceRefContext, EhInstanceRefContext, GraphElementsContext } from './graph';
+import { CyInstanceRefContext, EhInstanceRefContext, GraphElementsContext } from './cytoscape_graph';
 import { Rnd } from 'react-rnd';
 
 type Packet = {

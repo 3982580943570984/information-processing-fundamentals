@@ -11,8 +11,8 @@ import cytoscape, {
 } from 'cytoscape';
 import edgehandles, { EdgeHandlesInstance, EdgeHandlesOptions } from 'cytoscape-edgehandles';
 import { createContext, MutableRefObject, useEffect, useRef, useState } from 'react';
-import ControlPanel from './control_panel';
 import AdjacencyMatrix from './adjacency_matrix';
+import ControlPanel from './control_panel';
 
 type GraphElements = {
 	nodes: NodeDefinition[];
@@ -238,6 +238,6 @@ const CytoscapeGraph: React.FC = () => {
 
 export type { GraphElements };
 
-export { GraphElementsContext, CyInstanceRefContext, EhInstanceRefContext };
+export { CyInstanceRefContext, EhInstanceRefContext, GraphElementsContext };
 
 export default CytoscapeGraph;
